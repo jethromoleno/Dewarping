@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/4.4.0/fabric.min.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      #wrap {
+        line-height: 0;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      #error {
+        color: #b00020;
+        font: 12px/1.4 sans-serif;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <canvas id="quad-canvas"></canvas>
+    </div>
+    <div id="error"></div>
+    <script>
+      function sendMessageToStreamlit(type, data) {
+        window.parent.postMessage(
+          Object.assign({ isStreamlitMessage: true, type: type }, data),
+          "*"
+        );
+      }
+
+      function setFrameHeight(height) {
+        sendMessageToStreamlit("streamlit:setFrameHeight", { height: height });
+      }
+
+      function sendComponentValue(value) {
+        sendMessageToStreamlit("streamlit:setComponentValue", {
+          value: value,
+          dataType: "json",
+        });
+      }
+
+      function reportError(message) {
+        const errorNode = document.getElementById("error");
+        if (errorNode) {
+          errorNode.textContent = message;
+        }
+        sendComponentValue({ status: "error", message: message, corners: null });
+      }
+
+      let canvas = null;
+      let polygon = null;
+      let lastEditorKey = null;
+      let suppressEvents = false;
+
+      function getObjectSizeWithStroke(object) {
+        const stroke = new fabric.Point(
+          object.strokeUniform ? 1 / object.scaleX : 1,
+          object.strokeUniform ? 1 / object.scaleY : 1
+        ).multiply(object.strokeWidth);
+        return new fabric.Point(object.width + stroke.x, object.height + stroke.y);
+      }
+
+      function polygonPositionHandler(dim, finalMatrix, fabricObject) {
+        const point = fabricObject.points[this.pointIndex];
+        const local = {
+          x: point.x - fabricObject.pathOffset.x,
+          y: point.y - fabricObject.pathOffset.y,
+        };
+        return fabric.util.transformPoint(
+          local,
+          fabric.util.multiplyTransformMatrices(
+            fabricObject.canvas.viewportTransform,
+            fabricObject.calcTransformMatrix()
+          )
+        );
+      }
+
+      function actionHandler(eventData, transform, x, y) {
+        const poly = transform.target;
+        const control = poly.controls[poly.__corner];
+        const mouseLocalPosition = poly.toLocalPoint(
+          new fabric.Point(x, y),
+          "center",
+          "center"
+        );
+        const polygonBaseSize = getObjectSizeWithStroke(poly);
+        const size = poly._getTransformedDimensions(0, 0);
+        const finalPointPosition = {
+          x:
+            (mouseLocalPosition.x * polygonBaseSize.x) / size.x +
+            poly.pathOffset.x,
+          y:
+            (mouseLocalPosition.y * polygonBaseSize.y) / size.y +
+            poly.pathOffset.y,
+        };
+        poly.points[control.pointIndex] = finalPointPosition;
+        return true;
+      }
+
+      function anchorWrapper(anchorIndex, fn) {
+        return function (eventData, transform, x, y) {
+          const fabricObject = transform.target;
+          const absolutePoint = fabric.util.transformPoint(
+            {
+              x:
+                fabricObject.points[anchorIndex].x - fabricObject.pathOffset.x,
+              y:
+                fabricObject.points[anchorIndex].y - fabricObject.pathOffset.y,
+            },
+            fabricObject.calcTransformMatrix()
+          );
+          const actionPerformed = fn(eventData, transform, x, y);
+          const polygonBaseSize = getObjectSizeWithStroke(fabricObject);
+          const newX =
+            (fabricObject.points[anchorIndex].x - fabricObject.pathOffset.x) /
+            polygonBaseSize.x;
+          const newY =
+            (fabricObject.points[anchorIndex].y - fabricObject.pathOffset.y) /
+            polygonBaseSize.y;
+          fabricObject.setPositionByOrigin(absolutePoint, newX + 0.5, newY + 0.5);
+          return actionPerformed;
+        };
+      }
+
+      function enablePolygonEdit(poly) {
+        const lastControl = poly.points.length - 1;
+        poly.cornerStyle = "circle";
+        poly.cornerColor = "rgba(0, 255, 0, 0.95)";
+        poly.cornerSize = 12;
+        poly.hasBorders = false;
+        poly.hasControls = true;
+        poly.controls = poly.points.reduce(function (acc, point, index) {
+          acc["p" + index] = new fabric.Control({
+            positionHandler: polygonPositionHandler,
+            actionHandler: anchorWrapper(
+              index > 0 ? index - 1 : lastControl,
+              actionHandler
+            ),
+            actionName: "modifyPolygon",
+            pointIndex: index,
+          });
+          return acc;
+        }, {});
+      }
+
+      function absoluteCorners(poly) {
+        const matrix = poly.calcTransformMatrix();
+        return poly.points.map(function (p) {
+          const pt = fabric.util.transformPoint(
+            new fabric.Point(p.x - poly.pathOffset.x, p.y - poly.pathOffset.y),
+            matrix
+          );
+          return [pt.x, pt.y];
+        });
+      }
+
+      function sendCorners() {
+        if (suppressEvents || !polygon) {
+          return;
+        }
+        sendComponentValue({
+          status: "ready",
+          corners: absoluteCorners(polygon),
+        });
+      }
+
+      function createPolygon(corners) {
+        const points = corners.map(function (c) {
+          return { x: Number(c[0]), y: Number(c[1]) };
+        });
+        const poly = new fabric.Polygon(points, {
+          fill: "rgba(0, 255, 0, 0.08)",
+          stroke: "#00ff00",
+          strokeWidth: 2,
+          objectCaching: false,
+          selectable: true,
+          evented: true,
+          lockRotation: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockMovementX: false,
+          lockMovementY: false,
+          hasControls: false,
+          hasBorders: false,
+        });
+        enablePolygonEdit(poly);
+        return poly;
+      }
+
+      function loadPolygon(corners) {
+        if (!canvas) {
+          return;
+        }
+        suppressEvents = true;
+        if (polygon) {
+          canvas.remove(polygon);
+          polygon = null;
+        }
+        polygon = createPolygon(corners);
+        canvas.add(polygon);
+        canvas.setActiveObject(polygon);
+        canvas.requestRenderAll();
+        suppressEvents = false;
+        sendCorners();
+      }
+
+      function mountCanvas(args) {
+        if (typeof fabric === "undefined") {
+          reportError("Fabric.js failed to load.");
+          return;
+        }
+
+        const width = Number(args.canvasWidth);
+        const height = Number(args.canvasHeight);
+        if (!width || !height) {
+          reportError("Invalid canvas dimensions.");
+          return;
+        }
+
+        canvas = new fabric.Canvas("quad-canvas", {
+          selection: false,
+          width: width,
+          height: height,
+        });
+
+        canvas.on("object:modified", sendCorners);
+        canvas.on("mouse:up", sendCorners);
+
+        setFrameHeight(height + 4);
+
+        if (!args.backgroundDataUrl) {
+          loadPolygon(args.corners || []);
+          return;
+        }
+
+        fabric.Image.fromURL(
+          args.backgroundDataUrl,
+          function (img) {
+            if (!img) {
+              reportError("Background image failed to load.");
+              loadPolygon(args.corners || []);
+              return;
+            }
+            img.set({
+              left: 0,
+              top: 0,
+              selectable: false,
+              evented: false,
+            });
+            canvas.setBackgroundImage(
+              img,
+              function () {
+                canvas.requestRenderAll();
+                loadPolygon(args.corners || []);
+              },
+              {
+                scaleX: width / img.width,
+                scaleY: height / img.height,
+              }
+            );
+          }
+        );
+      }
+
+      function onRender(event) {
+        const args = event.detail ? event.detail.args : event.data.args;
+        if (!args) {
+          return;
+        }
+
+        const editorKey = String(args.editorKey || "");
+        const keyChanged = editorKey !== lastEditorKey;
+
+        if (!canvas) {
+          lastEditorKey = editorKey;
+          mountCanvas(args);
+          return;
+        }
+
+        if (keyChanged) {
+          lastEditorKey = editorKey;
+          loadPolygon(args.corners || []);
+        }
+      }
+
+      window.addEventListener("message", function (event) {
+        if (!event.data || event.data.type !== "streamlit:render") {
+          return;
+        }
+        onRender({ detail: { args: event.data.args } });
+      });
+
+      sendMessageToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+    </script>
+  </body>
+</html>
