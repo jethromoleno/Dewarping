@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #333333 #111111;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #111111;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: #333333;
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+  }
+
+  ::selection {
+    background: rgba(220, 38, 38, 0.3);
+    color: #ffffff;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-accent to-accent-dark text-white font-semibold
+           px-6 py-3 rounded-xl border-0 cursor-pointer
+           transition-all duration-200 ease-out
+           shadow-[0_4px_14px_rgba(220,38,38,0.25)]
+           hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(220,38,38,0.4)]
+           hover:from-accent-light hover:to-accent
+           active:translate-y-0
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_14px_rgba(220,38,38,0.25)];
+  }
+
+  .btn-secondary {
+    @apply bg-surface-card text-white/90 font-medium
+           px-5 py-2.5 rounded-xl border border-surface-border cursor-pointer
+           transition-all duration-200 ease-out
+           hover:bg-surface-hover hover:border-gray-500 hover:text-white;
+  }
+
+  .card {
+    @apply bg-surface-card border border-surface-border rounded-2xl p-6
+           transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply card hover:border-accent/30;
+  }
+
+  .input-field {
+    @apply bg-surface-dark border border-surface-border rounded-xl px-4 py-3
+           text-white placeholder-gray-500
+           transition-all duration-200
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 bg-surface-card border border-surface-border
+           rounded-lg px-3 py-1.5 text-xs text-gray-400;
+  }
+
+  .badge-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-accent;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-white/90 border-b-2 border-accent
+           pb-2 inline-block;
+  }
+
+  .code-block {
+    @apply bg-surface-dark border border-surface-border rounded-xl
+           p-4 text-sm text-gray-300 font-mono overflow-x-auto;
+  }
+}

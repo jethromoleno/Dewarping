@@ -47,39 +47,6 @@ def scale_points(points: np.ndarray, scale_factor: float) -> np.ndarray:
     return (points.astype(np.float32) / scale_factor).astype(np.float32)
 
 
-def scale_points_to_working(points: np.ndarray, scale_factor: float) -> np.ndarray:
-    """Map full-resolution points to working-copy coordinates."""
-    if scale_factor == 1.0:
-        return points.astype(np.float32).copy()
-    return (points.astype(np.float32) * scale_factor).astype(np.float32)
-
-
-def default_inset_corners(
-    width: int,
-    height: int,
-    margin_ratio: float = 0.1,
-) -> np.ndarray:
-    """Return TL, TR, BR, BL corners inset from image edges."""
-    margin_x = int(width * margin_ratio)
-    margin_y = int(height * margin_ratio)
-    return np.array(
-        [
-            [margin_x, margin_y],
-            [width - margin_x, margin_y],
-            [width - margin_x, height - margin_y],
-            [margin_x, height - margin_y],
-        ],
-        dtype=np.float32,
-    )
-
-
-def scale_corners_to_display(corners: np.ndarray, scale: float) -> np.ndarray:
-    """Map full-resolution corners to canvas display coordinates."""
-    if scale == 1.0:
-        return corners.astype(np.float32).copy()
-    return (corners.astype(np.float32) * scale).astype(np.float32)
-
-
 def scale_corners_to_full(corners: np.ndarray, scale: float) -> np.ndarray:
     """Map canvas display corners to full-resolution coordinates."""
     if scale == 1.0:
@@ -107,17 +74,27 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def draw_quad_outline_rgb(
-    rgb: np.ndarray,
-    corners: np.ndarray,
-    color: tuple[int, int, int] = (0, 255, 0),
-    thickness: int = 2,
-) -> np.ndarray:
-    """Draw a quadrilateral outline on an RGB image from ordered corner points."""
-    overlay = rgb.copy()
-    ordered = order_points(corners).astype(np.int32).reshape(-1, 1, 2)
-    cv2.polylines(overlay, [ordered], isClosed=True, color=color, thickness=thickness)
-    return overlay
+def order_points_cyclic(pts: np.ndarray) -> np.ndarray:
+    """
+    Order four points into a consistent counter-clockwise cyclic order.
+
+    Unlike :func:`order_points`, this does NOT assume the points are roughly
+    axis-aligned.  It sorts by angle around the centroid so consecutive points
+    are always polygon-adjacent sides, which is rotation-invariant.  The
+    returned order is [TL, TR, BR, BL] only in the sense that consecutive
+    points are sides; true up/down/left/right is resolved later by
+    text-orientation correction.
+    """
+    pts = np.array(pts, dtype=np.float32).reshape(4, 2)
+    centroid = pts.mean(axis=0)
+    angles = np.arctan2(pts[:, 1] - centroid[1], pts[:, 0] - centroid[0])
+    ordered = pts[np.argsort(angles)].astype(np.float32)
+
+    contour = ordered.reshape(-1, 1, 2)
+    if cv2.contourArea(contour) < 0:
+        ordered = ordered[::-1]
+    return ordered
+
 
 
 def encode_image_png(image: np.ndarray) -> bytes:

@@ -1,0 +1,9 @@
+tests/
+__pycache__/
+*.pyc
+*.pyo
+.env
+node_modules/
+frontend/dist/
+.vite/
+*.log
