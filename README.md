@@ -115,17 +115,22 @@ Dewarping/
     └── fixtures/                   # Test images
 ```
 
+## User Manual
+
+Step-by-step usage (upload, automatic label extraction, manual corners, download, and troubleshooting) is in **[USER_MANUAL.md](USER_MANUAL.md)**.
+
 ## Example Workflow
 
-1. Start the backend: `python -m uvicorn backend.main:app --reload`
+1. Start the backend: `python -m uvicorn backend.main:app --reload --port 8000`
 2. Start the frontend: `cd frontend && npm run dev`
 3. Open `http://localhost:5173`
 4. Drag and drop a distorted document photo (or click to browse)
-5. **Automatic:** Click "Detect Boundaries" then "Correct with Detected Boundaries"
-6. **Manual:** Drag the red corner handles to the document edges, click "Correct Image"
-7. Compare original and corrected side by side
-8. Expand "Processing Details" to inspect timing and homography
-9. Click "Download Corrected Image" to save
+5. **Automatic:** Click **Extract Label** to crop a sticker, or **Detect Boundaries** to find a document quad
+6. **Manual:** Drag the red corner handles to the document edges, then click **Correct Image**
+7. Compare original and result side by side
+8. Expand **Processing Details** to inspect timing and homography
+9. Click **Download Corrected Image** to save
+10. Click **New Image** to process another file
 
 ## Perspective Correction
 
